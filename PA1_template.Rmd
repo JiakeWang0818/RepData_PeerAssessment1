@@ -5,21 +5,103 @@ output:
     keep_md: true
 ---
 
-
 ## Loading and preprocessing the data
 
+```{r load_data, message=FALSE}
+# 加载需要的包 dplyr, lattice
+library(dplyr)
+library(lattice)
+
+# 读取数据，前提：activity.csv 放在和PA1_template.Rmd同一个文件夹
+activity <- read.csv("activity.csv")
+
+# 将date转为日期格式，很重要！后面判断星期几要用到
+activity$date <- as.Date(activity$date)
+```
+```{r q1, message=FALSE}
+# 按日期分组，计算每日总步数，NA自动忽略
+daily_total <- activity %>%
+  group_by(date) %>%
+  summarise(total_steps = sum(steps, na.rm = TRUE))
+
+# 画直方图
+hist(daily_total$total_steps,
+     main = "Histogram of total steps per day",
+     xlab = "Total steps per day",
+     col = "lightblue")
+
+# 计算均值和中位数
+mean_steps <- mean(daily_total$total_steps)
+median_steps <- median(daily_total$total_steps)
+```
+```{r q2, message=FALSE}
+interval_avg <- activity %>%
+  group_by(interval) %>%
+  summarise(avg_steps = mean(steps, na.rm = TRUE))
+
+# 折线图
+plot(interval_avg$interval, interval_avg$avg_steps,
+     type = "l",
+     xlab = "5-minute interval",
+     ylab = "Average number of steps",
+     main = "Average daily activity pattern")
+
+# 找到最大平均步数对应的interval
+max_interval <- interval_avg$interval[which.max(interval_avg$avg_steps)]
+```
 
 
-## What is mean total number of steps taken per day?
 
+```{r q3, message=FALSE}
+# 统计NA数量
+na_count <- sum(is.na(activity$steps))
 
+# 计算每个interval的平均步数，用来填充NA
+interval_mean <- activity %>%
+  group_by(interval) %>%
+  summarise(mean_steps = mean(steps, na.rm = TRUE))
 
-## What is the average daily activity pattern?
+# 合并原始数据和interval均值，替换NA，得到填充后的数据集 activity_imputed
+activity_imputed <- activity %>%
+  left_join(interval_mean, by = "interval") %>%
+  mutate(steps = ifelse(is.na(steps), mean_steps, steps)) %>%
+  select(-mean_steps) #删掉辅助用的mean_steps列
 
+# 计算填充后每天总步数
+daily_imputed_total <- activity_imputed %>%
+  group_by(date) %>%
+  summarise(total_steps = sum(steps))
 
+# 直方图
+hist(daily_imputed_total$total_steps,
+     main = "Histogram of total steps per day (NA filled)",
+     xlab = "Total steps per day",
+     col = "lightgreen")
 
-## Imputing missing values
+# 填充后的均值、中位数
+mean_imputed <- mean(daily_imputed_total$total_steps)
+median_imputed <- median(daily_imputed_total$total_steps)
+```
 
+```{r q4, message=FALSE}
+# 新增weektype变量：周六周日=weekend，其余weekday
+activity_imputed$weektype <- ifelse(
+  weekdays(activity_imputed$date) %in% c("Saturday","Sunday"),
+  "weekend",
+  "weekday"
+)
 
+# 分组求平均步数
+week_pattern <- activity_imputed %>%
+  group_by(interval, weektype) %>%
+  summarise(avg_steps = mean(steps), .groups = "drop")
 
-## Are there differences in activity patterns between weekdays and weekends?
+# lattice画图
+xyplot(avg_steps ~ interval | weektype,
+       data = week_pattern,
+       type = "l",
+       layout = c(1,2),
+       xlab = "5-minute interval",
+       ylab = "Average number of steps",
+       main = "Activity pattern: weekday vs weekend")
+```
